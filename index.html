@@ -1,0 +1,137 @@
+<html>
+  <head>
+    <title>Tinode js playground</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://maxcdn.bootstrapcdn.com/bootswatch/3.3.7/flatly/bootstrap.min.css" rel="stylesheet"/>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.4.4/vue.js"></script>
+    <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/tinode-sdk/umd/tinode.dev.js"></script>
+  </head>
+<body>
+  <div class="container" id="app">
+    <div class="row">
+      <div class="col-md-12">
+        <h1>Tinode js playground</h1>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-4">
+        <select v-model="selected">
+          <option v-for="c in contacts" :value="c.topic">
+            {{ c.public.fn}}</b> {{c.topic}} 
+          </option>
+        </select>
+      </div>
+      <div class="col-md-4">
+
+        <div>
+          message: <input type="text" v-model="message">
+          <a @click="send()" class="btn btn-default">Submit</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+
+    let tinode;
+    let curTopic;
+
+    (async () => {
+      const key = 'AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K';
+      tinode = new Tinode('test', 'localhost:6060', key, null, false);
+      tinode.enableLogging(true);
+      // Add logic to handle disconnects.
+      tinode.onDisconnect = function(err) { console.log(err) };
+      // tinode.onDataMessage = function (msg) { console.log('tinode msg', msg)};
+      // Connect to the server.
+      await tinode.connect();
+      const login = "qw123";
+      const password = "qwqw1234";
+      const ctrl = await tinode.loginBasic(login, password);
+
+      console.log('ctrl 1', ctrl);
+
+      const me = await tinode.getMeTopic();
+      console.log('me topic', me);
+
+      try {
+        const query = me.startMetaQuery().
+          withLaterSub().
+          withDesc().
+          withTags().
+          withCred().
+          withData().
+          build();
+        console.log('query:', JSON.stringify(query));
+        me.subscribe(query);
+
+        me.onMetaDesc = function(meta) { 
+          console.log('meta:', meta);     
+        };
+
+        me.onContactUpdate = function(what, cont) {
+          console.log('contact', what, cont);
+          curTopic = tinode.getTopic(cont.topic);
+          console.log('topic', curTopic);
+          curTopic.subscribe(
+            curTopic
+              .startMetaQuery()
+              .withLaterSub()
+              .withLaterDesc()
+              .withLaterData()
+              .build()
+          ).then(ctrl2 => console.log('ctrl2', ctrl2));
+
+          curTopic.onData = function(msg) {
+            console.log('onData message', msg);
+          }
+
+          curTopic.messages(function(msg) {
+            console.log('messages', msg);
+          });
+        };
+        
+        me.onSubsUpdated = async function(subs) {
+          me.contacts(c => { 
+            vm.contacts.push(c);
+            // console.log('c', c);
+          });          
+        };
+
+      } catch (err) {
+        console.log(err);
+      }
+    })()
+
+    const vm = new Vue({
+      el: '#app',
+      data: function () { 
+        return {
+          message: null,
+          contacts: [],
+          selected: null,
+        };
+      },
+      methods: {
+        send: async function () {
+          if (!this.selected) { console.log('no selected'); return};
+          const curTopic = await tinode.getTopic(this.selected);
+          await curTopic.subscribe(
+            curTopic
+              .startMetaQuery()
+              .withLaterSub()
+              .withLaterDesc()
+              .withLaterData()
+              .build()
+          );
+
+          const message2 = curTopic.createMessage(this.message);
+          console.log('message', message2);
+          curTopic.publishMessage(message2);
+        },
+      },
+    });
+  </script>
+</body>
+</html>
